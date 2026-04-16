@@ -53,11 +53,6 @@ export async function hybridSearch(
   // Run keyword search (always available, no API key needed)
   const keywordResults = await engine.searchKeyword(query, searchOpts);
 
-  // Skip vector search entirely if no OpenAI key is configured
-  if (!process.env.OPENAI_API_KEY) {
-    return dedupResults(keywordResults).slice(offset, offset + limit);
-  }
-
   // Determine query variants (optionally with expansion)
   // expandQuery already includes the original query in its return value,
   // so we use it directly instead of prepending query again
@@ -101,8 +96,9 @@ export async function hybridSearch(
   // Dedup
   const deduped = dedupResults(fused, opts?.dedupOpts);
 
-  // Auto-escalate: if detail=low returned 0, retry with high
-  if (deduped.length === 0 && opts?.detail === 'low') {
+  // Auto-escalate: if detail=low returned 0, retry with high.
+  // Check the resolved `detail`, not `opts?.detail` — the latter misses auto-detected low.
+  if (deduped.length === 0 && detail === 'low') {
     return hybridSearch(engine, query, { ...opts, detail: 'high' });
   }
 
