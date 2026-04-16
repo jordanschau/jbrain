@@ -85,11 +85,44 @@ describe('OllamaEmbeddingProvider', () => {
     expect(captured[0].url).toBe('http://gpu-box:11434/api/embed');
   });
 
-  test('truncates inputs to 8000 chars', async () => {
+  test('truncates inputs per model (nomic → 4800 chars)', async () => {
     nextResponse = { status: 200, body: { embeddings: [[0]], model: 'm' } };
     const p = new OllamaEmbeddingProvider({ model: 'nomic-embed-text' });
     await p.embedBatch(['a'.repeat(20000)]);
-    expect(captured[0].body.input[0].length).toBe(8000);
+    expect(captured[0].body.input[0].length).toBe(4800);
+  });
+
+  test('truncates mxbai-embed-large to 1200 chars (512-token context)', async () => {
+    nextResponse = { status: 200, body: { embeddings: [[0]], model: 'm' } };
+    const p = new OllamaEmbeddingProvider({ model: 'mxbai-embed-large' });
+    await p.embedBatch(['a'.repeat(20000)]);
+    expect(captured[0].body.input[0].length).toBe(1200);
+  });
+
+  test('explicit maxChars overrides the known table', async () => {
+    nextResponse = { status: 200, body: { embeddings: [[0]], model: 'm' } };
+    const p = new OllamaEmbeddingProvider({ model: 'mxbai-embed-large', maxChars: 500 });
+    await p.embedBatch(['a'.repeat(20000)]);
+    expect(captured[0].body.input[0].length).toBe(500);
+  });
+
+  test('adaptive: halves inputs and retries on context-length 400', async () => {
+    let calls = 0;
+    nextResponse = (() => {
+      calls++;
+      if (calls === 1) {
+        return { status: 400, body: { error: 'the input length exceeds the context length' } };
+      }
+      return { status: 200, body: { embeddings: [[1, 2, 3]], model: 'm' } };
+    }) as any;
+
+    const p = new OllamaEmbeddingProvider({ model: 'mxbai-embed-large' });
+    const result = await p.embedBatch(['a'.repeat(1200)]);
+
+    expect(result.length).toBe(1);
+    expect(captured.length).toBe(2);
+    expect(captured[0].body.input[0].length).toBe(1200);
+    expect(captured[1].body.input[0].length).toBe(600);
   });
 
   test('probes dimensions for unknown model on first call', async () => {

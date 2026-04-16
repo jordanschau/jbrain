@@ -24,19 +24,23 @@ const KNOWN_DIMENSIONS: Record<string, number> = {
   'embeddinggemma': 768,
 };
 
-// Per-model character truncation limits. Sized from each model's native context
-// (conservatively: ~4 chars/token, 80% of max context to leave headroom).
-// Override with `maxChars` constructor arg for custom modelfiles that extend num_ctx.
+// Per-model character truncation limits. Sized from each model's native context.
+// Dense content (names, URLs, technical terms) tokenizes at ~2-3 chars/token
+// rather than the typical 4; limits below assume dense content and leave a
+// safety margin. Override with `maxChars` constructor arg for custom modelfiles
+// that extend num_ctx.
 const KNOWN_MAX_CHARS: Record<string, number> = {
-  'nomic-embed-text': 6400,       // 2048 token context
-  'mxbai-embed-large': 1800,      // 512 token context
-  'snowflake-arctic-embed': 1800, // 512 token context
-  'snowflake-arctic-embed2': 6400, // 8192 but default 2048
-  'bge-m3': 6400,                 // 8192 token context
-  'bge-large': 1800,              // 512 token context
-  'all-minilm': 900,              // 256 token context
-  'embeddinggemma': 6400,         // 2048 token context
+  'nomic-embed-text': 4800,       // 2048 token context
+  'mxbai-embed-large': 1200,      // 512 token context (dense-content safe)
+  'snowflake-arctic-embed': 1200, // 512 token context
+  'snowflake-arctic-embed2': 4800, // 8192 but default 2048
+  'bge-m3': 4800,                 // 8192 token context
+  'bge-large': 1200,              // 512 token context
+  'all-minilm': 600,              // 256 token context
+  'embeddinggemma': 4800,         // 2048 token context
 };
+
+const CONTEXT_LENGTH_ERROR = /context length|context_length|maximum context/i;
 
 export interface OllamaEmbeddingOptions {
   model: string;
@@ -88,7 +92,7 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     if (texts.length === 0) return [];
     const truncated = texts.map(t => t.slice(0, this.maxChars));
-    const result = await this.callOllamaWithRetry(truncated);
+    const result = await this.callOllamaWithRetry(truncated, this.maxChars);
 
     if (!this.dimensionsResolved && result.length > 0) {
       this._dimensions = result[0].length;
@@ -98,11 +102,24 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
     return result;
   }
 
-  private async callOllamaWithRetry(texts: string[]): Promise<Float32Array[]> {
+  private async callOllamaWithRetry(
+    texts: string[],
+    currentMaxChars: number,
+  ): Promise<Float32Array[]> {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         return await this.callOllama(texts);
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+
+        // Adaptive truncation: halve inputs and retry when the model's context
+        // window is smaller than our char budget (happens on dense content).
+        if (CONTEXT_LENGTH_ERROR.test(msg) && currentMaxChars > 200) {
+          const next = Math.floor(currentMaxChars / 2);
+          const halved = texts.map(t => t.slice(0, next));
+          return this.callOllamaWithRetry(halved, next);
+        }
+
         if (attempt === MAX_RETRIES - 1) throw e;
         await sleep(exponentialDelay(attempt));
       }
