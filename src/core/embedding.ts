@@ -1,94 +1,28 @@
 /**
- * Embedding Service
- * Ported from production Ruby implementation (embedding_service.rb, 190 LOC)
+ * Embedding Service: thin delegator over the active EmbeddingProvider.
  *
- * OpenAI text-embedding-3-large at 1536 dimensions.
- * Retry with exponential backoff (4s base, 120s cap, 5 retries).
- * 8000 character input truncation.
+ * Provider selection (OpenAI, Ollama) is handled by src/core/providers/factory.ts
+ * via env vars (GBRAIN_EMBEDDING_PROVIDER) or config. Defaults to OpenAI
+ * text-embedding-3-large @ 1536d, preserving historical behavior.
  */
 
-import OpenAI from 'openai';
-
-const MODEL = 'text-embedding-3-large';
-const DIMENSIONS = 1536;
-const MAX_CHARS = 8000;
-const MAX_RETRIES = 5;
-const BASE_DELAY_MS = 4000;
-const MAX_DELAY_MS = 120000;
-const BATCH_SIZE = 100;
-
-let client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI();
-  }
-  return client;
-}
+import { getEmbeddingProvider } from './providers/factory.ts';
 
 export async function embed(text: string): Promise<Float32Array> {
-  const truncated = text.slice(0, MAX_CHARS);
-  const result = await embedBatch([truncated]);
+  const result = await embedBatch([text]);
   return result[0];
 }
 
 export async function embedBatch(texts: string[]): Promise<Float32Array[]> {
-  const truncated = texts.map(t => t.slice(0, MAX_CHARS));
-  const results: Float32Array[] = [];
-
-  // Process in batches of BATCH_SIZE
-  for (let i = 0; i < truncated.length; i += BATCH_SIZE) {
-    const batch = truncated.slice(i, i + BATCH_SIZE);
-    const batchResults = await embedBatchWithRetry(batch);
-    results.push(...batchResults);
-  }
-
-  return results;
+  return getEmbeddingProvider().embedBatch(texts);
 }
 
-async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      const response = await getClient().embeddings.create({
-        model: MODEL,
-        input: texts,
-        dimensions: DIMENSIONS,
-      });
-
-      // Sort by index to maintain order
-      const sorted = response.data.sort((a, b) => a.index - b.index);
-      return sorted.map(d => new Float32Array(d.embedding));
-    } catch (e: unknown) {
-      if (attempt === MAX_RETRIES - 1) throw e;
-
-      // Check for rate limit with Retry-After header
-      let delay = exponentialDelay(attempt);
-
-      if (e instanceof OpenAI.APIError && e.status === 429) {
-        const retryAfter = e.headers?.['retry-after'];
-        if (retryAfter) {
-          const parsed = parseInt(retryAfter, 10);
-          if (!isNaN(parsed)) {
-            delay = parsed * 1000;
-          }
-        }
-      }
-
-      await sleep(delay);
-    }
-  }
-
-  // Should not reach here
-  throw new Error('Embedding failed after all retries');
+/** Active embedding model name. Reads from the configured provider. */
+export function getEmbeddingModel(): string {
+  return getEmbeddingProvider().modelName;
 }
 
-function exponentialDelay(attempt: number): number {
-  const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-  return Math.min(delay, MAX_DELAY_MS);
+/** Active embedding dimensions. Reads from the configured provider. */
+export function getEmbeddingDimensions(): number {
+  return getEmbeddingProvider().dimensions;
 }
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export { MODEL as EMBEDDING_MODEL, DIMENSIONS as EMBEDDING_DIMENSIONS };

@@ -13,6 +13,13 @@ export interface GBrainConfig {
   database_path?: string;
   openai_api_key?: string;
   anthropic_api_key?: string;
+  // Provider selection. Defaults: openai embeddings, anthropic chat.
+  embedding_provider?: 'openai' | 'ollama';
+  embedding_model?: string;
+  embedding_dimensions?: number;
+  chat_provider?: 'anthropic' | 'ollama';
+  chat_model?: string;
+  ollama_host?: string;
 }
 
 /**
