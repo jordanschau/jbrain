@@ -8,8 +8,8 @@ Adjust `JBRAIN_ROOT` and `CHIBRAIN` paths to match your setup.
 # gbrain — local-first personal knowledge brain
 # ============================================================
 
-# Where you cloned jbrain
-set -x JBRAIN_ROOT $HOME/code/jbrain
+# Where you cloned jbrain (adjust to wherever `git clone` landed it)
+set -x JBRAIN_ROOT $HOME/Developer/Personal/jbrain
 
 # Your Obsidian vault (quotes around the path are important — iCloud has spaces)
 set -x CHIBRAIN "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/chiBrain"
@@ -32,6 +32,17 @@ set -x GBRAIN_CHAT_MODEL         'qwen3.6:35b-a3b-nvfp4'  # use exact tag from `
 function gbrain
     bun run $JBRAIN_ROOT/src/cli.ts $argv
 end
+```
+
+## Already have `gbrain` installed globally?
+
+If `which gbrain` shows `/Users/you/.bun/bin/gbrain` (an old 0.4.x from `bun link`),
+remove it so it can't shadow the fish function:
+
+```fish
+rm $HOME/.bun/bin/gbrain
+type gbrain        # should show: function, defined in config.fish
+gbrain --version   # should show 0.10.1 or later
 ```
 
 ## After editing the file
