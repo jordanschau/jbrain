@@ -48,8 +48,8 @@ CREATE TABLE IF NOT EXISTS content_chunks (
   chunk_index   INTEGER NOT NULL,
   chunk_text    TEXT    NOT NULL,
   chunk_source  TEXT    NOT NULL DEFAULT 'compiled_truth',
-  embedding     vector(1536),
-  model         TEXT    NOT NULL DEFAULT 'text-embedding-3-large',
+  embedding     vector(__EMBEDDING_DIMENSIONS__),
+  model         TEXT    NOT NULL DEFAULT '__EMBEDDING_MODEL__',
   token_count   INTEGER,
   embedded_at   TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -154,8 +154,8 @@ CREATE TABLE IF NOT EXISTS config (
 INSERT INTO config (key, value) VALUES
   ('version', '1'),
   ('engine', 'pglite'),
-  ('embedding_model', 'text-embedding-3-large'),
-  ('embedding_dimensions', '1536'),
+  ('embedding_model', '__EMBEDDING_MODEL__'),
+  ('embedding_dimensions', '__EMBEDDING_DIMENSIONS__'),
   ('chunk_strategy', 'semantic')
 ON CONFLICT (key) DO NOTHING;
 

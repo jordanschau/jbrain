@@ -18,7 +18,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot']);
+const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'reembed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot']);
 
 async function main() {
   const args = process.argv.slice(2);
@@ -321,6 +321,11 @@ async function handleCliOnly(command: string, args: string[]) {
         await runEmbed(engine, args);
         break;
       }
+      case 'reembed': {
+        const { runReembed } = await import('./commands/reembed.ts');
+        await runReembed(engine, args);
+        break;
+      }
       case 'serve': {
         const { runServe } = await import('./commands/serve.ts');
         await runServe(engine);
@@ -448,6 +453,7 @@ FILES
 
 EMBEDDINGS
   embed [<slug>|--all|--stale]       Generate/refresh embeddings
+  reembed [--dry-run] [--force]      Rebuild vector column at active provider's dim, re-embed all
 
 LINKS
   link <from> <to> [--type T]        Create typed link
