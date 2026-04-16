@@ -7,11 +7,11 @@
 
 import type { EmbeddingProvider } from './types.ts';
 
-const MAX_CHARS = 8000;
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30000;
 const DEFAULT_HOST = 'http://localhost:11434';
+const DEFAULT_MAX_CHARS = 2000; // Safe for 512-token models (~4 chars/token)
 
 const KNOWN_DIMENSIONS: Record<string, number> = {
   'nomic-embed-text': 768,
@@ -24,10 +24,26 @@ const KNOWN_DIMENSIONS: Record<string, number> = {
   'embeddinggemma': 768,
 };
 
+// Per-model character truncation limits. Sized from each model's native context
+// (conservatively: ~4 chars/token, 80% of max context to leave headroom).
+// Override with `maxChars` constructor arg for custom modelfiles that extend num_ctx.
+const KNOWN_MAX_CHARS: Record<string, number> = {
+  'nomic-embed-text': 6400,       // 2048 token context
+  'mxbai-embed-large': 1800,      // 512 token context
+  'snowflake-arctic-embed': 1800, // 512 token context
+  'snowflake-arctic-embed2': 6400, // 8192 but default 2048
+  'bge-m3': 6400,                 // 8192 token context
+  'bge-large': 1800,              // 512 token context
+  'all-minilm': 900,              // 256 token context
+  'embeddinggemma': 6400,         // 2048 token context
+};
+
 export interface OllamaEmbeddingOptions {
   model: string;
   host?: string;
   dimensions?: number;
+  /** Override max input chars per text (useful for extended-context modelfiles). */
+  maxChars?: number;
 }
 
 interface OllamaEmbedResponse {
@@ -40,6 +56,7 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
   private _dimensions: number;
   private host: string;
   private dimensionsResolved: boolean;
+  private maxChars: number;
 
   constructor(opts: OllamaEmbeddingOptions) {
     this.modelName = opts.model;
@@ -54,6 +71,8 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
       this._dimensions = 0;
       this.dimensionsResolved = false;
     }
+
+    this.maxChars = opts.maxChars ?? KNOWN_MAX_CHARS[baseModel] ?? DEFAULT_MAX_CHARS;
   }
 
   get dimensions(): number {
@@ -68,7 +87,7 @@ export class OllamaEmbeddingProvider implements EmbeddingProvider {
 
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     if (texts.length === 0) return [];
-    const truncated = texts.map(t => t.slice(0, MAX_CHARS));
+    const truncated = texts.map(t => t.slice(0, this.maxChars));
     const result = await this.callOllamaWithRetry(truncated);
 
     if (!this.dimensionsResolved && result.length > 0) {

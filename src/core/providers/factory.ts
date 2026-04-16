@@ -22,6 +22,8 @@ export interface ProviderConfig {
   embedding_provider?: EmbeddingProviderName;
   embedding_model?: string;
   embedding_dimensions?: number;
+  /** Per-text char truncation for embedding provider (safety for small-context models). */
+  embedding_max_chars?: number;
   chat_provider?: ChatProviderName;
   chat_model?: string;
   ollama_host?: string;
@@ -50,6 +52,9 @@ function readProviderConfig(override?: ProviderConfig): ProviderConfig {
     embedding_dimensions: process.env.GBRAIN_EMBEDDING_DIMENSIONS
       ? Number(process.env.GBRAIN_EMBEDDING_DIMENSIONS)
       : override?.embedding_dimensions,
+    embedding_max_chars: process.env.GBRAIN_EMBEDDING_MAX_CHARS
+      ? Number(process.env.GBRAIN_EMBEDDING_MAX_CHARS)
+      : override?.embedding_max_chars,
     chat_provider: (process.env.GBRAIN_CHAT_PROVIDER as ChatProviderName)
       || override?.chat_provider,
     chat_model: process.env.GBRAIN_CHAT_MODEL || override?.chat_model,
@@ -79,6 +84,7 @@ export function getEmbeddingProvider(override?: ProviderConfig): EmbeddingProvid
       model: config.embedding_model ?? 'nomic-embed-text',
       host: config.ollama_host,
       dimensions: config.embedding_dimensions,
+      maxChars: config.embedding_max_chars,
     });
   } else if (provider === 'openai') {
     instance = new OpenAIEmbeddingProvider({
