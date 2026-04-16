@@ -18,7 +18,7 @@ for (const op of operations) {
 }
 
 // CLI-only commands that bypass the operation layer
-const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'reembed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot']);
+const CLI_ONLY = new Set(['init', 'upgrade', 'post-upgrade', 'check-update', 'integrations', 'publish', 'check-backlinks', 'lint', 'report', 'import', 'export', 'files', 'embed', 'reembed', 'serve', 'call', 'config', 'doctor', 'migrate', 'eval', 'sync', 'extract', 'features', 'autopilot', 'obsidian']);
 
 async function main() {
   const args = process.argv.slice(2);
@@ -326,6 +326,11 @@ async function handleCliOnly(command: string, args: string[]) {
         await runReembed(engine, args);
         break;
       }
+      case 'obsidian': {
+        const { runObsidian } = await import('./commands/obsidian.ts');
+        await runObsidian(engine, args);
+        break;
+      }
       case 'serve': {
         const { runServe } = await import('./commands/serve.ts');
         await runServe(engine);
@@ -438,6 +443,7 @@ SEARCH
 
 IMPORT/EXPORT
   import <dir> [--no-embed]          Import markdown directory
+  obsidian <vault> [--watch]         Import Obsidian vault: wikilinks + #tags + watch
   sync [--repo <path>] [flags]       Git-to-brain incremental sync
   sync --watch [--interval N]        Continuous sync (loops until stopped)
   sync --install-cron                Install persistent sync daemon
