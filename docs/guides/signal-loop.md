@@ -198,6 +198,26 @@ launchctl load ~/Library/LaunchAgents/com.gbrain.calendar-puller.plist
 and `calendar-puller-gws.fish` (single-calendar gws) are kept for reference.
 The TS version supersedes both.
 
+**One-shot backfill.** To seed the brain with historical meetings, run
+`calendar-backfill.ts` once. It pulls a wide time range and emits one markdown
+file per month at `$CHIBRAIN/_inbox/calendar/backfill-YYYY-MM.md`.
+
+```fish
+# Last 12 months (~365 days)
+bun run scripts/pullers/calendar-backfill.ts --days 365 "$CHIBRAIN"
+
+# Or explicit range
+bun run scripts/pullers/calendar-backfill.ts --since 2025-04-17 --until 2026-04-17 "$CHIBRAIN"
+
+# Re-running is idempotent — existing month files are skipped. Pass --force
+# to overwrite.
+bun run scripts/pullers/calendar-backfill.ts --days 365 --force "$CHIBRAIN"
+```
+
+Each month file becomes a separate page in the brain, so queries like "who did
+I meet with last September" resolve against the right chunk. The agent can
+mine the digest later to promote specific meetings into dedicated pages.
+
 ### 4. Email puller (next)
 
 If you went with Option A above, the OAuth is already done. Gmail just needs a

@@ -1,28 +1,36 @@
 # calendar-sources.yaml
 #
-# Optional: restricts which calendars scripts/pullers/calendar-puller.ts pulls.
-# Copy to ~/.gbrain/calendar-sources.yaml and edit.
-#
-# Without this file the puller grabs every calendar `gws calendar calendarList
-# list` returns (every calendar your authed account can read — owned, shared,
-# or subscribed). With this file, ONLY the listed IDs or titles are pulled.
-#
-# How to get calendar IDs:
-#   gws calendar calendarList list --params '{}' | jq '.items[] | {id, summary}'
-#
-# Matching is against either .id (canonical) or .summary (display name).
-# Prefer IDs — they're stable across renames.
+# Copy to ~/.gbrain/calendar-sources.yaml. All fields are optional; the puller
+# uses safe defaults when this file doesn't exist.
 
+# Which calendars to pull. Matches against calendar id (preferred — stable)
+# or display summary. Without this section, every readable calendar is pulled.
+#
+# Get IDs: gws calendar calendarList list --params '{}' | jq '.items[] | {id, summary}'
 include:
-  # Your primary account's main calendar
-  - primary
+  - primary                                      # your own primary calendar
+  # - jordan@firstfincap.com
+  # - firstfincap.com_urirdi93fvv8ugd6m7e2dkrgp8@group.calendar.google.com   # "OFFICE"
+  # - abc123xyz@group.calendar.google.com        # after you share it INTO the authed account
 
-  # Example: pull a specific shared calendar from another Google account.
-  # You (or the owner) must first share it INTO the account that's authed
-  # with gws. After sharing, run `gws calendar calendarList list` to get the
-  # new ID and add it here.
-  # - "abc123xyz@group.calendar.google.com"
+# Regex patterns to drop from event titles (case-insensitive). Use for OOO
+# markers, location pseudo-events, focus blocks, etc. Empty/missing = no filter.
+exclude_patterns:
+  - "\\bOOO\\b"
+  - "\\bPTO\\b"
+  - "\\bWFH\\b"
+  - "Out of Office"
+  - "^Office$"          # only the literal "Office" all-day marker
+  - "Focus Time"
+  - "Deep Work"
+  - "^Lunch$"
+  # - "Birthday"
+  # - "Holiday"
 
-  # You can also match by display name (less stable — renames break it):
-  # - "JBI"
-  # - "PureCycles"
+# Drop events you declined. Default: true.
+skip_declined: true
+
+# Drop all-day events entirely. Default: false — most users want to see
+# them to route multi-day offsites or reviews. Flip to true if you find
+# all-day events mostly noise (birthdays, holidays, etc.).
+skip_all_day: false
