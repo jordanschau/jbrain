@@ -1,0 +1,30 @@
+# enrichment-schedule.yaml
+#
+# Copy to ~/.gbrain/enrichment-schedule.yaml. All fields optional; defaults
+# are sensible for a single-user setup. The script reads this every run so
+# edits take effect without restart.
+
+# Allowed hours window (local 24h). Outside this range, process-inbox.ts
+# exits immediately so launchd can fire frequently without doing work at
+# 3am. Use a wrap-around like "22-7" for overnight allowance. "null" to
+# disable the check (always allowed).
+allowed_hours: 8-20
+
+# Cap per run. If the inbox has 50 files and this is 20, the first 20
+# (oldest first) are processed, the rest wait for the next launchd fire.
+# Prevents Claude token blowups + protects Ollama from thrashing.
+# Set to 0 for unlimited.
+max_files_per_run: 20
+
+# Agent command. Defaults to `claude --print` (Claude Code CLI, headless).
+# Prompt is piped to stdin. Override if you've wrapped claude with your own
+# shim or want to swap for a different agent.
+#
+# Must be either a shell-style string ("claude --print --model sonnet") or
+# a YAML list:
+#   agent_command:
+#     - claude
+#     - --print
+#     - --model
+#     - claude-sonnet-4-6
+agent_command: claude --print

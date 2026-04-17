@@ -251,8 +251,79 @@ The skills in `skills/signal-detector/`, `skills/brain-ops/`, and
 `get_page` to read current wiki state, `put_page` to write updates (which now
 mirrors to the vault), and `add_link` / `add_timeline_entry` for graph edges.
 
-On a daily cadence (say 9 AM / 1 PM / 5 PM), trigger Claude to process
-`_inbox/`. That's the read-enrich-write loop closing.
+To **automate the loop** so you don't have to ask manually, install the
+scheduled enrichment runner:
+
+```fish
+# One-time config — copy the example and edit
+mkdir -p ~/.gbrain
+cp scripts/enrichment/enrichment-schedule.example.yaml ~/.gbrain/enrichment-schedule.yaml
+
+# Test: dry-run to see what's pending
+bun run scripts/enrichment/process-inbox.ts --dry-run "$CHIBRAIN"
+
+# Real run — processes up to max_files_per_run oldest-first. Each file:
+# Claude reads it, updates entity pages via MCP gbrain, then moves the file
+# to _archive/. Log at ~/.gbrain/enrichment.jsonl.
+bun run scripts/enrichment/process-inbox.ts "$CHIBRAIN"
+```
+
+**Schedule via launchd.** Save to
+`~/Library/LaunchAgents/com.gbrain.enrichment.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.gbrain.enrichment</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/you/.bun/bin/bun</string>
+    <string>run</string>
+    <string>/Users/you/Developer/Personal/jbrain/scripts/enrichment/process-inbox.ts</string>
+    <string>/Users/you/Library/Mobile Documents/iCloud~md~obsidian/Documents/chiBrain</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/you/.gbrain/enrichment.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/.gbrain/enrichment.err</string>
+</dict>
+</plist>
+```
+
+Three runs per day. The script's own `allowed_hours` check is a second
+guard — if you copy launchd entries later, the script still won't fire at
+3am even if you forget to remove them.
+
+```fish
+launchctl load ~/Library/LaunchAgents/com.gbrain.enrichment.plist
+
+# See what happened
+tail -f ~/.gbrain/enrichment.log
+tail -f ~/.gbrain/enrichment.jsonl | jq .
+```
+
+**What to expect.** After each run, check:
+- `ls "$CHIBRAIN/_inbox/"` — files here are still pending (either Claude
+  failed on them or the per-run cap was hit)
+- `ls "$CHIBRAIN/_archive/"` — files here are processed
+- `gbrain list --tag meeting -n 10` — new meeting pages the agent created
+- `gbrain query "what happened this week"` — hybrid search over the newly
+  enriched wiki
+
+If Claude consistently fails on certain files, check `~/.gbrain/enrichment.jsonl`
+for the error output and adjust the prompt in `process-inbox.ts` as needed.
+
+**Swap Claude for local.** To run enrichment entirely locally (no API cost,
+slower/lower-quality output), override `agent_command` in
+`enrichment-schedule.yaml` to point at a wrapper that invokes Ollama + MCP
+gbrain. The prompt format is the same; the model just needs to follow it.
 
 ## Verification
 
