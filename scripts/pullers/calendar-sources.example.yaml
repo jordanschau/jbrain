@@ -1,0 +1,28 @@
+# calendar-sources.yaml
+#
+# Optional: restricts which calendars scripts/pullers/calendar-puller.ts pulls.
+# Copy to ~/.gbrain/calendar-sources.yaml and edit.
+#
+# Without this file the puller grabs every calendar `gws calendar calendarList
+# list` returns (every calendar your authed account can read — owned, shared,
+# or subscribed). With this file, ONLY the listed IDs or titles are pulled.
+#
+# How to get calendar IDs:
+#   gws calendar calendarList list --params '{}' | jq '.items[] | {id, summary}'
+#
+# Matching is against either .id (canonical) or .summary (display name).
+# Prefer IDs — they're stable across renames.
+
+include:
+  # Your primary account's main calendar
+  - primary
+
+  # Example: pull a specific shared calendar from another Google account.
+  # You (or the owner) must first share it INTO the account that's authed
+  # with gws. After sharing, run `gws calendar calendarList list` to get the
+  # new ID and add it here.
+  # - "abc123xyz@group.calendar.google.com"
+
+  # You can also match by display name (less stable — renames break it):
+  # - "JBI"
+  # - "PureCycles"

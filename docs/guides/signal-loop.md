@@ -126,41 +126,47 @@ launchctl load ~/Library/LaunchAgents/com.gbrain.watch.plist
 
 ### 3. Calendar puller
 
-Two options. Pick one; both produce the same shape of output:
-`$CHIBRAIN/_inbox/calendar/YYYY-MM-DD.md` with a YAML frontmatter + bullet list
-of events. Watch ingests it.
+Run `scripts/pullers/calendar-puller.ts` (bun/TypeScript) every 15 min. It
+pulls today + tomorrow from **every calendar the authed `gws` account can
+see** — which lets you aggregate multiple Google accounts via calendar
+sharing (Google's native pattern) without juggling separate OAuth sessions.
 
-**Option A — Google Workspace CLI (recommended).** One tool, one auth, covers
-calendar AND email (future puller). JSON output is cleaner to parse.
+**One-time setup:**
 
 ```fish
-brew install googleworkspace-cli jq
-gws auth setup                # creates a Google Cloud project, enables APIs
-gws auth login                # OAuth browser flow. Personal @gmail.com works;
-                              # add yourself as a test user when prompted.
+brew install googleworkspace-cli
+gws auth setup       # creates a Google Cloud project, enables APIs
+gws auth login       # OAuth browser flow. Personal @gmail.com works;
+                     # add yourself as a test user when prompted.
+```
 
-# Test the puller
-./scripts/pullers/calendar-puller-gws.fish "$CHIBRAIN"
+**Multi-account strategy:** `gws` holds one auth at a time. To include
+calendars from your other Google accounts (e.g. jordan@purecycles.com,
+jordan@schau.com), share them INTO the authed account via Google Calendar:
+Settings → Share with specific people → add your authed account with
+"See all event details". Once shared, they appear in `calendarList list`
+and get pulled automatically.
+
+**Optional filter:** to restrict which calendars get pulled, copy
+`scripts/pullers/calendar-sources.example.yaml` to
+`~/.gbrain/calendar-sources.yaml` and list the calendar IDs you want.
+Get IDs with:
+
+```fish
+gws calendar calendarList list --params '{}' | jq '.items[] | {id, summary}'
+```
+
+Without the filter file, every calendar you have read access to gets pulled.
+
+**Test:**
+
+```fish
+bun run scripts/pullers/calendar-puller.ts "$CHIBRAIN"
 cat "$CHIBRAIN/_inbox/calendar/"(date +%Y-%m-%d)".md"
 ```
 
-Note: `gws` is pre-1.0 and explicitly not officially supported by Google despite
-the `googleworkspace` GitHub org. API may shift. Watch the repo for releases.
-
-**Option B — icalBuddy (macOS-only, no auth).** Reads Calendar.app, which
-already aggregates your Google/iCloud/Exchange accounts if they're synced there.
-Zero OAuth setup. Works offline.
-
-```fish
-brew install ical-buddy
-
-# Test
-./scripts/pullers/calendar-puller.fish "$CHIBRAIN"
-cat "$CHIBRAIN/_inbox/calendar/"(date +%Y-%m-%d)".md"
-```
-
-**Schedule it.** Save to `~/Library/LaunchAgents/com.gbrain.calendar-puller.plist`
-(swap the script filename for whichever option you chose):
+**Schedule via launchd.** Save to
+`~/Library/LaunchAgents/com.gbrain.calendar-puller.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -171,8 +177,9 @@ cat "$CHIBRAIN/_inbox/calendar/"(date +%Y-%m-%d)".md"
   <key>Label</key><string>com.gbrain.calendar-puller</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/fish</string>
-    <string>/Users/you/Developer/Personal/jbrain/scripts/pullers/calendar-puller-gws.fish</string>
+    <string>/Users/you/.bun/bin/bun</string>
+    <string>run</string>
+    <string>/Users/you/Developer/Personal/jbrain/scripts/pullers/calendar-puller.ts</string>
     <string>/Users/you/Library/Mobile Documents/iCloud~md~obsidian/Documents/chiBrain</string>
   </array>
   <key>StartInterval</key><integer>900</integer>
@@ -186,6 +193,10 @@ cat "$CHIBRAIN/_inbox/calendar/"(date +%Y-%m-%d)".md"
 ```fish
 launchctl load ~/Library/LaunchAgents/com.gbrain.calendar-puller.plist
 ```
+
+**Legacy fish pullers** at `scripts/pullers/calendar-puller.fish` (icalBuddy)
+and `calendar-puller-gws.fish` (single-calendar gws) are kept for reference.
+The TS version supersedes both.
 
 ### 4. Email puller (next)
 
