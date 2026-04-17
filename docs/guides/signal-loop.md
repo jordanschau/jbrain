@@ -126,24 +126,41 @@ launchctl load ~/Library/LaunchAgents/com.gbrain.watch.plist
 
 ### 3. Calendar puller
 
-Run the included fish puller every 15 minutes. It dumps today's + tomorrow's
-macOS Calendar events into `$CHIBRAIN/_inbox/calendar/YYYY-MM-DD.md` using
-`icalBuddy`. The watch loop picks it up and ingests it into the brain.
+Two options. Pick one; both produce the same shape of output:
+`$CHIBRAIN/_inbox/calendar/YYYY-MM-DD.md` with a YAML frontmatter + bullet list
+of events. Watch ingests it.
 
-Install icalBuddy:
-
-```fish
-brew install ical-buddy
-```
-
-Test the puller:
+**Option A — Google Workspace CLI (recommended).** One tool, one auth, covers
+calendar AND email (future puller). JSON output is cleaner to parse.
 
 ```fish
-scripts/pullers/calendar-puller.fish
+brew install googleworkspace-cli jq
+gws auth setup                # creates a Google Cloud project, enables APIs
+gws auth login                # OAuth browser flow. Personal @gmail.com works;
+                              # add yourself as a test user when prompted.
+
+# Test the puller
+./scripts/pullers/calendar-puller-gws.fish "$CHIBRAIN"
 cat "$CHIBRAIN/_inbox/calendar/"(date +%Y-%m-%d)".md"
 ```
 
-Schedule it. Save to `~/Library/LaunchAgents/com.gbrain.calendar-puller.plist`:
+Note: `gws` is pre-1.0 and explicitly not officially supported by Google despite
+the `googleworkspace` GitHub org. API may shift. Watch the repo for releases.
+
+**Option B — icalBuddy (macOS-only, no auth).** Reads Calendar.app, which
+already aggregates your Google/iCloud/Exchange accounts if they're synced there.
+Zero OAuth setup. Works offline.
+
+```fish
+brew install ical-buddy
+
+# Test
+./scripts/pullers/calendar-puller.fish "$CHIBRAIN"
+cat "$CHIBRAIN/_inbox/calendar/"(date +%Y-%m-%d)".md"
+```
+
+**Schedule it.** Save to `~/Library/LaunchAgents/com.gbrain.calendar-puller.plist`
+(swap the script filename for whichever option you chose):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -155,7 +172,7 @@ Schedule it. Save to `~/Library/LaunchAgents/com.gbrain.calendar-puller.plist`:
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/fish</string>
-    <string>/Users/you/Developer/Personal/jbrain/scripts/pullers/calendar-puller.fish</string>
+    <string>/Users/you/Developer/Personal/jbrain/scripts/pullers/calendar-puller-gws.fish</string>
     <string>/Users/you/Library/Mobile Documents/iCloud~md~obsidian/Documents/chiBrain</string>
   </array>
   <key>StartInterval</key><integer>900</integer>
@@ -170,12 +187,24 @@ Schedule it. Save to `~/Library/LaunchAgents/com.gbrain.calendar-puller.plist`:
 launchctl load ~/Library/LaunchAgents/com.gbrain.calendar-puller.plist
 ```
 
-### 4. Email puller (later)
+### 4. Email puller (next)
 
-See `recipes/email-to-brain.md` for the full recipe. The short version: write a
-Node/Bun script that lists new Gmail messages, filters noise, and dumps
-markdown digests into `$CHIBRAIN/_inbox/email/YYYY-MM-DD.md`. The watch loop
-picks them up the same way.
+If you went with Option A above, the OAuth is already done. Gmail just needs a
+separate puller script:
+
+```fish
+# Sketch — full puller coming as Phase 5
+gws gmail users messages list --params '{"q":"newer_than:1d -label:noise"}' \
+  | jq -r '.messages[] | .id' \
+  | while read id
+        gws gmail users messages get --params "{\"id\":\"$id\",\"format\":\"metadata\"}" \
+          | format_as_markdown_into $CHIBRAIN/_inbox/email/
+    end
+```
+
+The full email puller follows `recipes/email-to-brain.md`: noise filters,
+signature detection, deduplication via state file, Gmail links generated in
+code (never by the LLM).
 
 ### 5. Agent enrichment (the brain's job)
 
