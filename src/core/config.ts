@@ -20,6 +20,10 @@ export interface GBrainConfig {
   chat_provider?: 'anthropic' | 'ollama';
   chat_model?: string;
   ollama_host?: string;
+  // When set, write-mutating operations (put_page, delete_page) also write to
+  // the vault at this path as markdown. Enables the read-enrich-write loop
+  // against an Obsidian vault or similar markdown-backed store.
+  vault_path?: string;
 }
 
 /**
@@ -48,6 +52,7 @@ export function loadConfig(): GBrainConfig | null {
     engine: inferredEngine,
     ...(dbUrl ? { database_url: dbUrl } : {}),
     ...(process.env.OPENAI_API_KEY ? { openai_api_key: process.env.OPENAI_API_KEY } : {}),
+    ...(process.env.GBRAIN_VAULT_PATH ? { vault_path: process.env.GBRAIN_VAULT_PATH } : {}),
   };
   return merged as GBrainConfig;
 }

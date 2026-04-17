@@ -116,7 +116,7 @@ const get_page: Operation = {
 
 const put_page: Operation = {
   name: 'put_page',
-  description: 'Write/update a page (markdown with frontmatter). Chunks, embeds, and reconciles tags.',
+  description: 'Write/update a page (markdown with frontmatter). Chunks, embeds, reconciles tags. When vault_path is configured, also writes the markdown to the vault file so Obsidian stays in sync.',
   params: {
     slug: { type: 'string', required: true, description: 'Page slug' },
     content: { type: 'string', required: true, description: 'Full markdown content with YAML frontmatter' },
@@ -125,14 +125,42 @@ const put_page: Operation = {
   handler: async (ctx, p) => {
     if (ctx.dryRun) return { dry_run: true, action: 'put_page', slug: p.slug };
     const result = await importFromContent(ctx.engine, p.slug as string, p.content as string);
-    return { slug: result.slug, status: result.status === 'imported' ? 'created_or_updated' : result.status, chunks: result.chunks };
+
+    // Vault mirror: write the same content to the vault file so Obsidian
+    // (and any other reader of the vault) sees the update. Watch-mode will
+    // detect this write but importFromContent's hash-based dedup makes the
+    // resulting re-ingest a no-op.
+    let vault_path: string | null = null;
+    if (ctx.config.vault_path && result.status === 'imported') {
+      try {
+        const { writeFile, mkdir } = await import('fs/promises');
+        const { dirname, resolve, join, relative } = await import('path');
+        const vaultRoot = resolve(ctx.config.vault_path);
+        const absPath = resolve(join(vaultRoot, `${p.slug}.md`));
+        const rel = relative(vaultRoot, absPath);
+        if (!rel.startsWith('..') && resolve(vaultRoot, rel) === absPath) {
+          await mkdir(dirname(absPath), { recursive: true });
+          await writeFile(absPath, p.content as string, 'utf-8');
+          vault_path = absPath;
+        }
+      } catch (e) {
+        ctx.logger.warn?.(`vault mirror failed for ${p.slug}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+
+    return {
+      slug: result.slug,
+      status: result.status === 'imported' ? 'created_or_updated' : result.status,
+      chunks: result.chunks,
+      ...(vault_path ? { vault_path } : {}),
+    };
   },
   cliHints: { name: 'put', positional: ['slug'], stdin: 'content' },
 };
 
 const delete_page: Operation = {
   name: 'delete_page',
-  description: 'Delete a page',
+  description: 'Delete a page from the brain (and from the vault file when vault_path is configured).',
   params: {
     slug: { type: 'string', required: true },
   },
@@ -140,7 +168,17 @@ const delete_page: Operation = {
   handler: async (ctx, p) => {
     if (ctx.dryRun) return { dry_run: true, action: 'delete_page', slug: p.slug };
     await ctx.engine.deletePage(p.slug as string);
-    return { status: 'deleted' };
+
+    let vault_deleted: string | null = null;
+    if (ctx.config.vault_path) {
+      try {
+        const { deletePageFromVault } = await import('./vault-writer.ts');
+        vault_deleted = await deletePageFromVault(ctx.config.vault_path, p.slug as string);
+      } catch (e) {
+        ctx.logger.warn?.(`vault delete failed for ${p.slug}: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    return { status: 'deleted', ...(vault_deleted ? { vault_deleted } : {}) };
   },
   cliHints: { name: 'delete', positional: ['slug'] },
 };
